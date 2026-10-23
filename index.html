@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pedios Cafés">
+<meta name="theme-color" content="#6f4e37">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Pedios Cafés Cali</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font:17px/1.35 -apple-system,system-ui,sans-serif;background:#f6f1ea;color:#2b1d12;padding-top:env(safe-area-inset-top)}
+#main{padding:14px 14px calc(96px + env(safe-area-inset-bottom))}
+h1{font-size:26px;margin:6px 0 10px}h2{margin:4px 0 8px}h3{margin:18px 0 6px;font-size:16px;color:#6f4e37}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;border-top:1px solid #ddd;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;border:0;background:none;padding:8px 0 6px;font-size:11px;color:#777}
+nav button span{display:block;font-size:23px}nav button.on{color:#6f4e37;font-weight:700}
+.btn{display:block;width:100%;min-height:54px;border:0;border-radius:14px;background:#6f4e37;color:#fff;font-size:18px;font-weight:600;margin:10px 0;padding:0 14px;text-align:center;text-decoration:none;line-height:54px}
+.btn.sec{background:#e6dccf;color:#4a3426}.btn.red{background:#fff;color:#c0392b;border:2px solid #c0392b}
+.card{background:#fff;border-radius:14px;padding:14px;margin:8px 0;box-shadow:0 1px 2px #0002}
+.r{display:flex;justify-content:space-between;gap:10px;align-items:center}
+small{color:#7a6a5c;display:block;font-size:14px}.empty{text-align:center;color:#7a6a5c;padding:26px 0}
+input,select,textarea{width:100%;font:inherit;font-size:17px;padding:13px;border:1.5px solid #cdbfae;border-radius:12px;background:#fff;color:inherit;min-height:50px}
+label{display:block;font-weight:600;margin:14px 0 5px}
+.navw{display:flex;align-items:center;gap:8px;margin:8px 0}.navw button{width:54px;height:50px;border:0;border-radius:12px;background:#e6dccf;font-size:26px}.navw div{flex:1;text-align:center}
+.sum{display:flex;gap:10px}.sum div{flex:1;background:#fff;border-radius:14px;padding:12px;text-align:center}.sum b{font-size:22px}
+.seg{display:flex;gap:6px}.seg button{flex:1;min-height:46px;border:0;border-radius:10px;background:#e6dccf;font-size:15px}.seg button.on{background:#6f4e37;color:#fff}
+#sheet{position:fixed;inset:0;background:#f6f1ea;overflow:auto;z-index:10;padding:calc(14px + env(safe-area-inset-top)) 14px 0;display:none}
+.foot{position:sticky;bottom:0;background:#f6f1ea;padding:8px 0 calc(10px + env(safe-area-inset-bottom));border-top:1px solid #ddd;margin-top:14px}
+.step{display:flex;align-items:center;gap:6px}.step button{width:46px;height:46px;border:0;border-radius:10px;background:#e6dccf;font-size:24px}.step input{width:62px;text-align:center;padding:8px 2px}
+.lt{min-width:74px;text-align:right;font-weight:600}.warn{background:#fff3cd;border-radius:12px;padding:12px;margin:8px 0}
+.sub{display:flex;justify-content:space-between;font-size:15px;color:#5a4a3c;padding:2px 0}
+</style></head><body>
+<div id="main"></div><div id="sheet"></div>
+<nav>
+<button data-a="tab" data-id="pedidos"><span>🧾</span>Pedidos</button>
+<button data-a="tab" data-id="clientes"><span>👤</span>Clientes</button>
+<button data-a="tab" data-id="productos"><span>☕</span>Productos</button>
+<button data-a="tab" data-id="informes"><span>📊</span>Informes</button>
+<button data-a="tab" data-id="copia"><span>💾</span>Copia</button>
+</nav>
+<input type="file" id="fi" accept=".json,application/json" hidden>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur=c=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(c/100);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const STORES=['clients','products','orders'];
+const D={clients:[],products:[],orders:[],lastBackup:0};
+const V={tab:'pedidos',wk:0,rt:'w',ro:0,rc:'',cq:''};
+let db,cur=null,E=null;
+const byName=(a,b)=>a.name.localeCompare(b.name,'es');
+const fq=q=>String(Math.round(q*1000)/1000).replace('.',',');
+const qv=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)||x<0?0:Math.round(x*1000)/1000};
+/* ---------- Base de datos ---------- */
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('pedios-cafes-cali',1);
+r.onupgradeneeded=()=>{STORES.forEach(s=>r.result.createObjectStore(s,{keyPath:'id'}));r.result.createObjectStore('meta',{keyPath:'k'})};
+r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+const all=s=>new Promise((res,rej)=>{const q=db.transaction(s).objectStore(s).getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)});
+const wr=(s,fn)=>new Promise((res,rej)=>{const t=db.transaction(s,'readwrite');fn(t.objectStore(s));t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)});
+function mirror(){try{localStorage.setItem('pcc_mirror',JSON.stringify(D))}catch(e){}}
+async function save(s,v){await wr(s,st=>st.put(v));const i=D[s].findIndex(x=>x.id===v.id);i<0?D[s].push(v):D[s][i]=v;mirror()}
+async function remove(s,id){await wr(s,st=>st.delete(id));D[s]=D[s].filter(x=>x.id!==id);mirror()}
+async function safe(f){try{await f();return true}catch(e){console.error(e);alert('No se pudo guardar. Inténtalo de nuevo y haz una copia de seguridad cuanto antes.');return false}}
+function replaceAll(d){return new Promise((res,rej)=>{const t=db.transaction([...STORES,'meta'],'readwrite');
+STORES.forEach(s=>{const st=t.objectStore(s);st.clear();(d[s]||[]).forEach(v=>st.put(v))});
+t.objectStore('meta').put({k:'lastBackup',v:d.lastBackup||0});
+t.oncomplete=()=>{STORES.forEach(s=>D[s]=d[s]||[]);D.lastBackup=d.lastBackup||0;mirror();res()};t.onerror=t.onabort=()=>rej(t.error)})}
+async function load(){const [c,p,o,m]=await Promise.all([all('clients'),all('products'),all('orders'),all('meta')]);
+if(!c.length&&!p.length&&!o.length){try{const mm=JSON.parse(localStorage.getItem('pcc_mirror')||'null');
+if(mm&&((mm.clients||[]).length||(mm.products||[]).length||(mm.orders||[]).length)){await replaceAll(mm);return}}catch(e){}}
+D.clients=c;D.products=p;D.orders=o;const lb=m.find(x=>x.k==='lastBackup');D.lastBackup=lb?lb.v:0;mirror()}
+/* ---------- Fechas ---------- */
+const pd=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const fd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const addD=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const monday=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
+const short=d=>d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7));return Math.ceil(((t-Date.UTC(t.getUTCFullYear(),0,1))/864e5+1)/7)}
+function range(t,o){const n=new Date();let a,b,l;
+if(t==='w'){a=addD(monday(n),o*7);b=addD(a,7);l='Semana '+isoWeek(a)+' · '+short(a)+' – '+short(addD(b,-1))+' '+addD(b,-1).getFullYear()}
+else if(t==='m'){a=new Date(n.getFullYear(),n.getMonth()+o,1);b=new Date(a.getFullYear(),a.getMonth()+1,1);l=cap(a.toLocaleDateString('es-ES',{month:'long',year:'numeric'}))}
+else if(t==='q'){const qi=Math.floor(n.getMonth()/3)+o;a=new Date(n.getFullYear(),qi*3,1);b=new Date(a.getFullYear(),a.getMonth()+3,1);l=(Math.floor(a.getMonth()/3)+1)+'.º trimestre '+a.getFullYear()}
+else{a=new Date(n.getFullYear()+o,0,1);b=new Date(a.getFullYear()+1,0,1);l='Año '+a.getFullYear()}
+return{a:fd(a),b:fd(b),label:l}}
+const ordersIn=(r,cid)=>D.orders.filter(o=>o.date>=r.a&&o.date<r.b&&(!cid||o.cid===cid)).sort((x,y)=>y.date.localeCompare(x.date)||y.created-x.created);
+const cname=o=>{const c=D.clients.find(x=>x.id===o.cid);return c?c.name:o.cn+' (eliminado)'};
+/* ---------- Vistas ---------- */
+function banner(){const n=D.clients.length+D.products.length+D.orders.length;
+if(n&&(!D.lastBackup||Date.now()-D.lastBackup>7*864e5))return`<div class="warn">⚠️ ${D.lastBackup?'Hace más de 7 días que no haces una copia de seguridad.':'Aún no has hecho ninguna copia de seguridad.'}<button class="btn sec" data-a="tab" data-id="copia" style="margin:8px 0 0">Ir a Copia de seguridad</button></div>`;return''}
+function orderCard(o){return`<div class="card" data-a="editOrder" data-id="${o.id}"><div class="r"><b>${esc(cname(o))}</b><b>${eur(o.total)}</b></div><small>${cap(pd(o.date).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'short'}))}</small><small>${esc(o.lines.map(l=>fq(l.q)+'× '+l.n).join(', '))}</small></div>`}
+function clientList(){const q=V.cq.trim().toLowerCase();const l=D.clients.filter(c=>c.name.toLowerCase().includes(q)).sort(byName);
+if(!l.length)return`<p class="empty">${D.clients.length?'Ningún cliente coincide.':'Aún no hay clientes.<br>Pulsa «Añadir cliente».'}</p>`;
+return l.map(c=>`<div class="card"><div class="r"><div data-a="editClient" data-id="${c.id}" style="flex:1"><b>${esc(c.name)}</b><small>${esc(c.phone)}${c.phone&&c.address?' · ':''}${esc(c.address)}</small></div>${c.phone?`<a class="btn" style="width:54px;margin:0;line-height:54px" href="tel:${esc(c.phone.replace(/[^\d+]/g,''))}">📞</a>`:''}</div></div>`).join('')}
+const VIEWS={
+pedidos(){const r=range('w',V.wk),os=ordersIn(r);
+return banner()+`<h1>Pedidos</h1><div class="navw"><button data-a="wp">‹</button><div><b>${r.label}</b></div><button data-a="wn">›</button></div>
+<div class="sum"><div><small>Pedidos</small><b>${os.length}</b></div><div><small>Total</small><b>${eur(os.reduce((s,o)=>s+o.total,0))}</b></div></div>
+<button class="btn" data-a="newOrder">＋ Nuevo pedido</button>`+(os.length?os.map(orderCard).join(''):'<p class="empty">No hay pedidos esta semana.</p>')+(V.wk?'<button class="btn sec" data-a="wthis">Ir a esta semana</button>':'')},
+clientes(){return`<h1>Clientes</h1><input id="cq" placeholder="🔍 Buscar por nombre" value="${esc(V.cq)}"><button class="btn" data-a="newClient">＋ Añadir cliente</button><div id="list">${clientList()}</div>`},
+productos(){const l=[...D.products].sort(byName);
+return`<h1>Productos</h1><button class="btn" data-a="newProduct">＋ Añadir producto</button>`+(l.length?l.map(p=>`<div class="card" data-a="editProduct" data-id="${p.id}"><div class="r"><div><b>${esc(p.name)}</b>${p.ref?`<small>Ref. ${esc(p.ref)}</small>`:''}</div><b>${eur(p.price)}</b></div></div>`).join(''):'<p class="empty">Aún no hay productos.<br>Pulsa «Añadir producto».</p>')},
+informes(){const r=range(V.rt,V.ro),os=ordersIn(r,V.rc),tot=os.reduce((s,o)=>s+o.total,0);const bc={},bp={};
+os.forEach(o=>{const b=bc[o.cid]||(bc[o.cid]={n:cname(o),c:0,t:0,p:{}});b.c++;b.t+=o.total;o.lines.forEach(l=>{const q=b.p[l.n]||(b.p[l.n]={q:0,t:0});q.q+=l.q;q.t+=l.t;const g=bp[l.n]||(bp[l.n]={q:0,t:0});g.q+=l.q;g.t+=l.t})});
+const T={w:'Semana',m:'Mes',q:'Trimestre',y:'Año'};
+const cl=Object.values(bc).sort((a,b)=>b.t-a.t),pl=Object.entries(bp).sort((a,b)=>b[1].t-a[1].t);
+return`<h1>Informes</h1><div class="seg">${Object.keys(T).map(k=>`<button class="${V.rt===k?'on':''}" data-a="rt" data-id="${k}">${T[k]}</button>`).join('')}</div>
+<div class="navw"><button data-a="rp">‹</button><div><b>${r.label}</b></div><button data-a="rn">›</button></div>
+<select id="rc"><option value="">Todos los clientes</option>${[...D.clients].sort(byName).map(c=>`<option value="${c.id}"${V.rc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+<div class="sum" style="margin-top:10px"><div><small>Pedidos</small><b>${os.length}</b></div><div><small>Importe total</small><b>${eur(tot)}</b></div></div>`+
+(os.length?`<h3>POR CLIENTE Y PRODUCTO</h3>`+cl.map(b=>`<div class="card"><div class="r"><b>${esc(b.n)}</b><b>${eur(b.t)}</b></div><small>${b.c} pedido${b.c>1?'s':''}</small>${Object.entries(b.p).sort((x,y)=>y[1].t-x[1].t).map(([n,v])=>`<div class="sub"><span>${fq(v.q)}× ${esc(n)}</span><span>${eur(v.t)}</span></div>`).join('')}</div>`).join('')+
+`<h3>TOTAL POR PRODUCTO</h3><div class="card">${pl.map(([n,v])=>`<div class="sub"><span>${fq(v.q)}× ${esc(n)}</span><b>${eur(v.t)}</b></div>`).join('')}</div>`:'<p class="empty">No hay pedidos en este periodo.</p>')},
+copia(){const n=`${D.clients.length} clientes, ${D.products.length} productos y ${D.orders.length} pedidos`;
+return`<h1>Copia de seguridad</h1><div class="card"><b>Datos guardados en este iPhone</b><small>${n}</small><small>Última copia: ${D.lastBackup?new Date(D.lastBackup).toLocaleString('es-ES'):'nunca'}</small></div>
+<button class="btn" data-a="backup">⬇️ Guardar copia de seguridad</button><button class="btn sec" data-a="restore">⬆️ Restaurar una copia</button>
+<div class="card"><small>Al guardar la copia, elige «Guardar en Archivos» o envíatela por correo/WhatsApp. Hazla con frecuencia (por ejemplo, cada semana). Al restaurar, se sustituyen todos los datos actuales.</small></div>`}};
+function render(){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.id===V.tab));$('#main').innerHTML=VIEWS[V.tab]()}
+function sheet(h){const s=$('#sheet');s.innerHTML=h;s.style.display='block';s.scrollTop=0}
+function closeSheet(){$('#sheet').style.display='none';$('#sheet').innerHTML=''}
+/* ---------- Acciones ---------- */
+const A={};
+document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(el&&A[el.dataset.a])A[el.dataset.a](el.dataset.id,el)});
+A.tab=id=>{V.tab=id;render();window.scrollTo(0,0)};
+A.wp=()=>{V.wk--;render()};A.wn=()=>{V.wk++;render()};A.wthis=()=>{V.wk=0;render()};
+A.rt=id=>{V.rt=id;V.ro=0;render()};A.rp=()=>{V.ro--;render()};A.rn=()=>{V.ro++;render()};
+A.close=closeSheet;
+const form=(t,f,id,delA)=>sheet(`<h2>${t}</h2>${f}<div class="foot"><button class="btn" data-a="${id}">Guardar</button><button class="btn sec" data-a="close">Cancelar</button>${delA?`<button class="btn red" data-a="${delA}">Eliminar</button>`:''}</div>`);
+/* Clientes */
+A.newClient=()=>{cur=null;clientForm({})};
+A.editClient=id=>{cur=id;clientForm(D.clients.find(c=>c.id===id))};
+function clientForm(c){form(cur?'Editar cliente':'Nuevo cliente',`<label>Nombre</label><input id="f1" value="${esc(c.name)}"><label>Teléfono</label><input id="f2" type="tel" value="${esc(c.phone)}"><label>Dirección</label><input id="f3" value="${esc(c.address)}"><label>Observaciones</label><textarea id="f4" rows="3">${esc(c.notes)}</textarea>`,'saveClient',cur&&'delClient')}
+A.saveClient=async()=>{const n=$('#f1').value.trim();if(!n)return alert('Escribe el nombre del cliente.');
+const o=cur&&D.clients.find(x=>x.id===cur);const c={id:cur||uid(),name:n,phone:$('#f2').value.trim(),address:$('#f3').value.trim(),notes:$('#f4').value.trim(),created:o?o.created:Date.now()};
+if(await safe(()=>save('clients',c))){closeSheet();render()}};
+A.delClient=async()=>{const c=D.clients.find(x=>x.id===cur);if(confirm(`¿Eliminar al cliente «${c.name}»?\n\nSus pedidos anteriores se conservarán.`)&&await safe(()=>remove('clients',cur))){closeSheet();render()}};
+/* Productos */
+A.newProduct=()=>{cur=null;prodForm({})};
+A.editProduct=id=>{cur=id;prodForm(D.products.find(p=>p.id===id))};
+function prodForm(p){form(cur?'Editar producto':'Nuevo producto',`<label>Nombre</label><input id="f1" value="${esc(p.name)}"><label>Precio unitario (€)</label><input id="f2" inputmode="decimal" placeholder="0,00" value="${p.price!=null?(p.price/100).toFixed(2).replace('.',','):''}"><label>Referencia (opcional)</label><input id="f3" value="${esc(p.ref)}">`,'saveProduct',cur&&'delProduct')}
+A.saveProduct=async()=>{const n=$('#f1').value.trim();if(!n)return alert('Escribe el nombre del producto.');
+const pr=Math.round(parseFloat($('#f2').value.replace(',','.'))*100);if(isNaN(pr)||pr<0)return alert('Escribe un precio válido, por ejemplo 4,50.');
+const o=cur&&D.products.find(x=>x.id===cur);const p={id:cur||uid(),name:n,price:pr,ref:$('#f3').value.trim(),created:o?o.created:Date.now()};
+if(await safe(()=>save('products',p))){closeSheet();render()}};
+A.delProduct=async()=>{const p=D.products.find(x=>x.id===cur);if(confirm(`¿Eliminar el producto «${p.name}»?\n\nLos pedidos anteriores conservarán su nombre y precio.`)&&await safe(()=>remove('products',cur))){closeSheet();render()}};
+/* Pedidos */
+const eTotal=()=>Object.values(E.l).reduce((s,l)=>s+Math.round(l.p*l.q),0);
+function upd(pid){const l=E.l[pid];$('#q-'+pid).value=l.q?fq(l.q):'';$('#t-'+pid).textContent=l.q?eur(Math.round(l.p*l.q)):'';$('#tot').textContent=eur(eTotal())}
+function orderSheet(){const cl=[...D.clients].sort(byName);const ex=E.cid&&!cl.find(c=>c.id===E.cid);
+const rows=Object.entries(E.l).sort((a,b)=>a[1].n.localeCompare(b[1].n,'es')).map(([pid,l])=>`<div class="card"><div class="r"><div style="flex:1"><b>${esc(l.n)}</b><small>${eur(l.p)}</small></div><div class="lt" id="t-${pid}"></div></div><div class="step" style="margin-top:8px"><button data-a="qm" data-id="${pid}">−</button><input id="q-${pid}" inputmode="decimal" placeholder="0"><button data-a="qp" data-id="${pid}">＋</button></div></div>`).join('');
+sheet(`<h2>${E.id?'Editar pedido':'Nuevo pedido'}</h2><label>Cliente</label><select id="oc"><option value="">Elegir cliente…</option>${ex?`<option value="${E.cid}" selected>${esc(E.cn)} (eliminado)</option>`:''}${cl.map(c=>`<option value="${c.id}"${c.id===E.cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+<label>Fecha</label><input type="date" id="od" value="${E.date}"><label>Productos</label>${rows}
+<div class="foot"><div class="r" style="font-size:20px;margin-bottom:4px"><span>Total</span><b id="tot"></b></div><button class="btn" data-a="saveOrder">Guardar pedido</button><button class="btn sec" data-a="close">Cancelar</button>${E.id?'<button class="btn red" data-a="delOrder">Eliminar pedido</button>':''}</div>`);
+Object.keys(E.l).forEach(upd)}
+A.newOrder=()=>{if(!D.clients.length)return alert('Primero añade al menos un cliente (pestaña Clientes).');if(!D.products.length)return alert('Primero añade al menos un producto (pestaña Productos).');
+E={id:null,cid:'',cn:'',date:fd(new Date()),l:{}};D.products.forEach(p=>E.l[p.id]={n:p.name,p:p.price,q:0});orderSheet()};
+A.editOrder=id=>{const o=D.orders.find(x=>x.id===id);E={id:o.id,cid:o.cid,cn:o.cn,date:o.date,created:o.created,l:{}};
+o.lines.forEach(l=>E.l[l.pid]={n:l.n,p:l.p,q:l.q});D.products.forEach(p=>{if(!E.l[p.id])E.l[p.id]={n:p.name,p:p.price,q:0}});orderSheet()};
+A.qp=pid=>{E.l[pid].q=Math.round((E.l[pid].q+1)*1000)/1000;upd(pid)};
+A.qm=pid=>{E.l[pid].q=Math.max(0,Math.round((E.l[pid].q-1)*1000)/1000);upd(pid)};
+document.addEventListener('input',e=>{const t=e.target;
+if(t.id==='cq'){V.cq=t.value;$('#list').innerHTML=clientList()}
+else if(E&&t.id==='oc')E.cid=t.value;else if(E&&t.id==='od')E.date=t.value;
+else if(E&&t.id&&t.id.startsWith('q-')){const pid=t.id.slice(2);E.l[pid].q=qv(t.value);$('#t-'+pid).textContent=E.l[pid].q?eur(Math.round(E.l[pid].p*E.l[pid].q)):'';$('#tot').textContent=eur(eTotal())}});
+document.addEventListener('change',e=>{if(e.target.id==='rc'){V.rc=e.target.value;render()}});
+A.saveOrder=async()=>{if(!E.cid)return alert('Elige un cliente.');if(!E.date)return alert('Elige la fecha.');
+const lines=Object.entries(E.l).filter(([,l])=>l.q>0).map(([pid,l])=>({pid,n:l.n,p:l.p,q:l.q,t:Math.round(l.p*l.q)}));if(!lines.length)return alert('Añade al menos un producto.');
+const c=D.clients.find(x=>x.id===E.cid);const o={id:E.id||uid(),date:E.date,cid:E.cid,cn:c?c.name:E.cn,lines,total:lines.reduce((s,l)=>s+l.t,0),created:E.created||Date.now(),updated:Date.now()};
+if(await safe(()=>save('orders',o))){V.wk=Math.round((monday(pd(o.date))-monday(new Date()))/(7*864e5));E=null;closeSheet();V.tab='pedidos';render()}};
+A.delOrder=async()=>{if(confirm('¿Eliminar este pedido? No se puede deshacer.')&&await safe(()=>remove('orders',E.id))){E=null;closeSheet();render()}};
+const _c=closeSheet;
+/* Copias */
+A.backup=async()=>{const j=JSON.stringify({app:'pedios-cafes-cali',v:1,exported:new Date().toISOString(),data:{clients:D.clients,products:D.products,orders:D.orders}},null,1);
+const name='pedios-cafes-cali-'+fd(new Date())+'.json';const f=new File([j],name,{type:'application/json'});
+try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:name});else{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=name;a.click()}
+const ts=Date.now();await wr('meta',st=>st.put({k:'lastBackup',v:ts}));D.lastBackup=ts;mirror();render()}catch(e){if(e.name!=='AbortError')alert('No se pudo crear la copia.')}};
+A.restore=()=>$('#fi').click();
+$('#fi').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+try{const j=JSON.parse(await f.text());const d=j.data||j;if(!STORES.every(s=>Array.isArray(d[s])))throw 0;
+if(!confirm(`Esta copia contiene ${d.clients.length} clientes, ${d.products.length} productos y ${d.orders.length} pedidos.\n\nSe SUSTITUIRÁN todos los datos actuales. ¿Continuar?`))return;
+try{localStorage.setItem('pcc_prev',JSON.stringify(D))}catch(x){}
+d.lastBackup=D.lastBackup||Date.now();await replaceAll(d);render();alert('Copia restaurada correctamente.')}catch(x){alert('El archivo no es una copia válida de Pedios Cafés Cali. No se ha cambiado nada.')}});
+/* ---------- Inicio ---------- */
+(async()=>{try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();db=await openDB();await load();render()}
+catch(e){$('#main').innerHTML='<div class="warn"><b>No se pueden guardar datos en este navegador.</b><br>Abre la app desde Safari o desde el icono de la pantalla de inicio, sin navegación privada.</div>'}
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0)navigator.serviceWorker.register('sw.js').catch(()=>{})})();
+</script></body></html>
